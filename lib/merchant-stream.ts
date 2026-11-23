@@ -5,7 +5,7 @@ export type MetricChart = {
   title: string;
   measure: string;
   filters: MetricInput;
-  kind: "line" | "ranking" | "bars" | "metric";
+  kind: "line" | "ranking" | "bars" | "metric" | "rate";
   points: { id?: string; label: string; value: number }[];
   returns?: ReturnType<typeof returnedLineDetails>;
 };

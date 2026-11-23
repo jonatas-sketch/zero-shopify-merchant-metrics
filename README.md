@@ -132,19 +132,8 @@ The exercise requires a public Vercel URL. The deployment must read the original
 npm run verify:acceptance -- http://127.0.0.1:3000
 ```
 
-The same command accepts the public URL when it is available. It checks the winter jacket question and seven acceptance cases. For questions outside the dataset, a clear no-data response is expected without a chart.
+The command accepts the public URL when it is available. It checks the winter jacket question and all 20 acceptance cases. Pass an optional list of case IDs after the URL to retry specific questions. Out-of-scope questions should give a clear no-data response. Supported questions with an empty result keep the chosen filters and show an empty state.
 
 ### Local acceptance results
 
-The results below were collected against the original CSV on localhost. The public deployment and its timings have yet to be confirmed.
-
-| Test | Observed output | First chart |
-| --- | --- | ---: |
-| Winter jacket returns | Four returned lines from October 20–26, with matching table rows | 2.23 s |
-| AQ-01 | Online Store sales of 1,230.90 from September 27 through October 26 | 1.33 s |
-| AQ-02 | Ranking for the default range with 4, 4, and 3 units in the top three positions | 3.36 s |
-| AQ-03 | Four jacket return lines, October 20–26 | 2.69 s |
-| AQ-07 | No-data response for Meta ad spend | — |
-| AQ-08 | Six returns in the default range | 1.52 s |
-| AQ-10 | Four of twelve October customers were marked repeat | 1.72 s |
-| AQ-20 | No-data response for remaining inventory | — |
+The full localhost run with the original CSV selected the expected report or no-data outcome on 19 of the 20 workbook cases. AQ-04 returned no chart on either attempt. AQ-14 and AQ-17 produced correct results in 5.61 and 12.11 seconds on the full run and in 2.41 and 1.77 seconds on retry. The separate winter-jacket report showed four returns and appeared in 2.45 seconds. The browser also rendered both sales channels and the no-records state for boots. Public deployment and public timings are pending.

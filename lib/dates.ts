@@ -7,7 +7,11 @@ export const metricInputSchema = z.object({
   endDate: z.iso.date(),
   product: z.string().trim().min(1).optional(),
   category: z.string().trim().min(1).optional(),
+  categories: z.array(z.string().trim().min(1)).min(1).max(8).optional(),
   channel: z.string().trim().min(1).optional(),
+  channels: z.array(z.string().trim().min(1)).min(1).max(8).optional(),
+  groupBy: z.enum(["week", "channel", "returnReason", "returnedProduct", "returnRate"]).optional(),
+  limit: z.number().int().min(1).max(50).optional(),
 }).refine((input) => input.startDate <= input.endDate, {
   path: ["endDate"],
   message: "End date must be on or after the start date.",
@@ -21,6 +25,7 @@ export const datePresetSchema = z.enum([
   "this-month",
   "last-month",
   "completed-30-days",
+  "since-labor-day",
   "trailing-30-days",
 ]);
 export type DatePreset = z.infer<typeof datePresetSchema>;
@@ -55,6 +60,12 @@ export function resolveDateRange(
   }
   if (preset === "completed-30-days") {
     return { startDate: daysAgo(30), endDate: daysAgo(1) };
+  }
+  if (preset === "since-labor-day") {
+    const firstSeptember = new Date(Date.UTC(date.getUTCFullYear(), 8, 1));
+    firstSeptember.setUTCDate(1 + (8 - firstSeptember.getUTCDay()) % 7);
+    const startDate = isoDay(firstSeptember);
+    if (startDate < anchor) return { startDate, endDate: daysAgo(1) };
   }
   return { startDate: daysAgo(29), endDate: anchor };
 }

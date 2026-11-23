@@ -25,12 +25,12 @@ const formatMeasure = (measure: string) => (value: unknown) =>
 
 function ChartPlot({ chart }: { chart: MetricChart }) {
   const { kind, points, measure, filters } = chart;
-  if (kind === "metric") {
-    const repeat = points[0].value;
+  if (kind === "metric" || kind === "rate") {
+    const matched = points[0].value;
     const total = points[1].value;
     return <div className="repeat-metric">
-      <strong>{(repeat / total).toLocaleString("en", { style: "percent", maximumFractionDigits: 1 })}</strong>
-      <span>{repeat} of {total} customers were repeat customers</span>
+      <strong>{(matched / total).toLocaleString("en", { style: "percent", maximumFractionDigits: 1 })}</strong>
+      <span>{matched} of {total} {kind === "rate" ? "order lines were returned by the end of the period" : "customers were repeat customers"}</span>
     </div>;
   }
 
@@ -53,7 +53,7 @@ function ChartPlot({ chart }: { chart: MetricChart }) {
     <BarChart data={points} layout={ranking ? "vertical" : "horizontal"} margin={{ right: 12 }}>
       <CartesianGrid horizontal={!ranking} vertical={ranking} stroke="#d9e3db" />
       {ranking
-        ? <><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="label" width={122} tickFormatter={shortenProduct} /></>
+        ? <><XAxis type="number" allowDecimals={points.some(({ value }) => !Number.isInteger(value))} /><YAxis type="category" dataKey="label" width={122} tickFormatter={shortenProduct} /></>
         : <><XAxis type="category" dataKey="label" tickFormatter={formatDay} /><YAxis type="number" width={55} allowDecimals={false} tickFormatter={formatValue} /></>}
       <Tooltip formatter={formatMeasure(measure)} />
       <Bar dataKey="value" name={measure} fill="#286948" isAnimationActive={false} />
@@ -63,7 +63,8 @@ function ChartPlot({ chart }: { chart: MetricChart }) {
 
 function ChartCard({ chart }: { chart: MetricChart }) {
   const { title, measure, points, filters, kind } = chart;
-  const rowLabel = kind === "ranking" ? "Product" : kind === "metric" ? "Cohort" : "Date";
+  const isRateCard = kind === "metric" || kind === "rate";
+  const rowLabel = kind === "ranking" ? "Group" : isRateCard ? "Cohort" : "Date";
 
   return (
     <figure className="merchant-chart">
@@ -72,11 +73,13 @@ function ChartCard({ chart }: { chart: MetricChart }) {
         <span>{filters.startDate} to {filters.endDate}</span>
         {filters.product && <span>Product: {filters.product}</span>}
         {filters.category && <span>Category: {filters.category}</span>}
+        {filters.categories && <span>Categories: {filters.categories.join(", ")}</span>}
         {filters.channel && <span>Channel: {filters.channel}</span>}
+        {filters.channels && <span>Channels: {filters.channels.join(", ")}</span>}
       </figcaption>
       {points.length === 0 ? <p>No records matched these filters.</p> : (
         <>
-          {kind === "metric" ? <ChartPlot chart={chart} /> :
+          {isRateCard ? <ChartPlot chart={chart} /> :
             <div role="img" aria-label={`${title}. ${measure}.`}><ChartPlot chart={chart} /></div>}
           <details>
             <summary>View exact values</summary>

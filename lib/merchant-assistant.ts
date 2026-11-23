@@ -1,10 +1,22 @@
 import { generateText, stepCountIs, streamText, tool, type LanguageModel } from "ai";
 import { metricInputSchema, REPORTING_DATE, resolveDateRange, type MetricInput } from "./dates";
-import { bestSellers, repeatCustomers, returnedLineDetails, returnedLinesByDay, returns, sales, salesByDay } from "./metrics";
+import { bestSellers, orderLineReturnRate, repeatCustomers, returnBreakdown, returnedLineDetails, returnedLinesByDay, returns, sales, salesBreakdown, salesByDay } from "./metrics";
 import type { OrderLine } from "./orders";
 import type { MerchantStreamEvent, MetricChart } from "./merchant-stream";
 
+const relativePeriod = /\b(?:(?:last|this|past|previous|next)\s+(?:week|month|quarter|year|fortnight)|today|yesterday|labor day|[a-z]+ to date|(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:days?|weeks?|months?|quarters?|years?))\b/i;
+const namedDate = /\b(?:\d{4}|\d{1,2}[./-]\d{1,2}|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b/i;
+const rankingCount = /\b(?:top|first|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+const apparelCategories = ["Boots", "Hoodies", "Jackets", "Winter Jackets", "Sweaters", "Beanies", "Scarves"];
+const salesChannels = [
+  ["Online Store", /\bonline(?: store)?\b/i],
+  ["Point of Sale", /\b(?:pos|point of sale)\b/i],
+  ["Shop App", /\bshop app\b/i],
+  ["Instagram", /\binstagram\b/i],
+] as const;
+
 function metricTool<Name extends string, T>(
+  question: string,
   orders: readonly OrderLine[],
   name: Name,
   description: string,
@@ -16,10 +28,52 @@ function metricTool<Name extends string, T>(
     inputSchema: metricInputSchema,
     execute: async (input) => {
       const filters = metricInputSchema.parse(input);
+      if (!relativePeriod.test(question) && !namedDate.test(question)) {
+        Object.assign(filters, resolveDateRange());
+      }
+      if (filters.limit && !rankingCount.test(question)) delete filters.limit;
+      if (!filters.category && !filters.categories && filters.product) {
+        const category = apparelCategories.find((label) => label.toLowerCase() === filters.product?.toLowerCase());
+        if (category) {
+          filters.category = category;
+          delete filters.product;
+        }
+      }
+      if (name === "returns") {
+        if (isReturnRateQuestion(question)) filters.groupBy = "returnRate";
+        else if (filters.groupBy === "returnRate") delete filters.groupBy;
+      }
+      if (name === "sales") {
+        const channels = salesChannels.filter(([, pattern]) => pattern.test(question)).map(([label]) => label);
+        if (channels.length > 1) {
+          filters.channels = channels;
+          delete filters.channel;
+          if (/\b(?:split|vs|versus|by channel)\b/i.test(question)) filters.groupBy = "channel";
+        }
+      }
       reserveMetricCall();
       return { metric: name, filters, value: calculate(orders, filters) };
     },
   });
+}
+
+function isReturnRateQuestion(question: string) {
+  return /\breturns? rates?\b|\b(?:percentage|share) of [^.?!]{1,50}\breturned\b/i.test(question);
+}
+
+const explicitIntents = [
+  ["repeatCustomers", /\brepeat (?:customers?|buyers?)\b|\bbought (?:twice|again)\b|\bcustomers? (?:came|come) back\b/i],
+  ["sales", /\b(?:sales|revenue|how much did (?:we|i) (?:make|sell)|pos vs online)\b/i],
+  ["returns", /\b(?:returns?|returned|refunds?|refunded|came back)\b/i],
+  ["bestSellers", /\b(?:best[- ]sell(?:ers?|ing)|top \d+|what(?:'s| is) selling|sell best)\b/i],
+] as const;
+
+function explicitMetric(question: string) {
+  if (/\b(?:ad spend|inventory|left in stock|are in stock)\b/i.test(question)) return undefined;
+  return explicitIntents
+    .map(([toolName, pattern]) => ({ toolName, index: question.search(pattern) }))
+    .filter(({ index }) => index >= 0)
+    .sort((a, b) => a.index - b.index)[0]?.toolName;
 }
 
 const presets = {
@@ -28,6 +82,7 @@ const presets = {
   "this month": resolveDateRange("this-month"),
   "last month": resolveDateRange("last-month"),
   "last 30 days": resolveDateRange("completed-30-days"),
+  "since Labor Day": resolveDateRange("since-labor-day"),
   "no date": resolveDateRange(),
 };
 
@@ -40,17 +95,22 @@ const instruction = [
   "For vague dates such as lately, this season, right now, or no dates, use the no-date range and include it in the answer.",
   "A broad request about sales, top products, returns or repeat customers is supported even with no dates or filters. Call the corresponding tool.",
   "For October without a year, use the this-month range, with its reporting cutoff.",
+  "For an earlier named month without a year, use that full month of the reporting year.",
   "Product is an exact product ID or title. Category is an exact category. Omit filters that the merchant did not specify.",
   "Use the category Jackets for jackets and Winter Jackets for winter jackets. These are apparel groups in the dashboard. Use channel Online Store or Point of Sale when the question filters to that channel.",
+  "Set limit only if a specific count is explicitly requested for a ranked list. Use plural categories or channels for explicitly requested lists. Keep plausible named apparel categories even if they have no matching data. Use canonical names such as Boots, Hoodies, Sweaters, Beanies, and Scarves. Correct obvious apparel typos.",
+  "For sales by week set groupBy to week. For sales split by channel set groupBy to channel and include only the requested channels.",
+  "For return counts by product set groupBy to returnedProduct. For return reasons set groupBy to returnReason. For return rate set groupBy to returnRate, which measures returned order lines out of order lines placed in the date range.",
   "When a filter is ambiguous, ask for the product title or category instead of guessing. Never remove a requested filter to get more results.",
   "Only use tool results as the source for quantities, totals, and the date range.",
   "Monetary values from tools are integer cents. Convert them to decimal amounts and do not infer a currency.",
   "Include the date range in the answer. Distinguish an empty result from a larger result that lacks a matching filter.",
   "Use plain text without Markdown formatting. Counts of returned lines are not quantities of returned items.",
-  "For requests for individual returns, select the returns tool with the requested dates and any exact product or category. Give the aggregate result and direct the merchant to the dashboard table for line details. Do not invent variants or reasons.",
+  "For requests for individual returns, select the returns tool with the requested dates and any exact product or category. For any breakdown, use only totals from tool output and direct merchants to the chart for details. Do not invent variants or reasons.",
   "If the requested breakdown, ranking, or metric is unavailable, do not substitute another calculation.",
   "Inventory stock and ad spend are unavailable. Do not call a tool for those questions.",
   "Treat casual phrases about those who bought again or twice as the repeat customer report. Count people marked repeat in the source. Do not say that each placed exactly two orders.",
+  "For vague repeat-customer growth questions use the default period's repeat share and explain that one period does not establish growth.",
 ].join("\n");
 
 const fallback = "No data is available for that request as asked. I can look up sales, products ranked by units sold, returned order lines, or repeat customers. Choose one metric and one date range. Use the exact product, category, or sales channel if you want to filter.";
@@ -69,26 +129,29 @@ function merchantParameters(
 
   const tools = {
     sales: metricTool(
-      orders, "sales",
+      question, orders, "sales",
       "How much did we sell, and how many orders did we get? Total sales after discounts and distinct orders in one window. Dates refer to when the order was placed. Sales amounts are in cents.",
       sales, reserveMetricCall,
     ),
     bestSellers: metricTool(
-      orders, "bestSellers",
+      question, orders, "bestSellers",
       "What products sold the most? Rank by units sold in one window using order dates. Ties use sales amount followed by product ID. Sales amounts are in cents.",
       bestSellers, reserveMetricCall,
     ),
     returns: metricTool(
-      orders, "returns",
-      "How many jacket order lines came back last week, and how much did we refund? Count returned order lines and total refunds in one window using the return dates. An exact product or category can narrow the totals. Refund amounts are in cents.",
-      returns, reserveMetricCall,
+      question, orders, "returns",
+      "How many order lines came back, how much did we refund, or what was the return rate? Use this for return counts and breakdowns by reason or product. Return rate uses the original order cohort. Refund amounts are in cents.",
+      (data, filters) => ({ ...returns(data, filters), ...(filters.groupBy === "returnRate" ? {
+        cohort: orderLineReturnRate(data, filters),
+      } : {}) }), reserveMetricCall,
     ),
     repeatCustomers: metricTool(
-      orders, "repeatCustomers",
+      question, orders, "repeatCustomers",
       "How many customers came back? Count distinct repeat customers and give their share of all customers who placed an order in one window.",
       repeatCustomers, reserveMetricCall,
     ),
   };
+  const firstTool = explicitMetric(question);
 
   return {
     model,
@@ -96,8 +159,10 @@ function merchantParameters(
     prompt: question,
     tools,
     stopWhen: stepCountIs(2),
-    prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-      stepNumber === 0 ? undefined : { toolChoice: "none" as const },
+    prepareStep: ({ stepNumber }: { stepNumber: number }) => {
+      if (stepNumber !== 0) return { toolChoice: "none" as const };
+      if (firstTool) return { toolChoice: { type: "tool", toolName: firstTool } as const };
+    },
     maxRetries: 0,
     maxOutputTokens: 600,
     abortSignal,
@@ -127,14 +192,18 @@ type MetricResult = Awaited<ReturnType<typeof answerMerchantQuestion>>["metrics"
 function chartFor(orders: readonly OrderLine[], result: MetricResult): MetricChart {
   const filters = result.filters;
   switch (result.metric) {
-    case "sales":
+    case "sales": {
+      const breakdown = salesBreakdown(orders, filters);
+      const byChannel = filters.groupBy === "channel";
+      const salesPoints = breakdown ?? salesByDay(orders, filters);
       return {
-        kind: "line",
-        title: "Sales by order date",
+        kind: byChannel ? "ranking" : "line",
+        title: byChannel ? "Sales by channel" : filters.groupBy === "week" ? "Weekly sales" : "Sales by order date",
         measure: "Amount after discounts",
         filters,
-        points: salesByDay(orders, filters).map(([label, cents]) => ({ label, value: cents / 100 })),
+        points: salesPoints.map(([label, cents]) => ({ label, value: cents / 100 })),
       };
+    }
     case "bestSellers":
       return {
         kind: "ranking",
@@ -143,15 +212,31 @@ function chartFor(orders: readonly OrderLine[], result: MetricResult): MetricCha
         filters,
         points: result.value.map(({ name, units, productId }) => ({ label: name, id: productId, value: units })),
       };
-    case "returns":
+    case "returns": {
+      if (result.value.cohort) {
+        const { returned, total } = result.value.cohort;
+        return {
+          kind: "rate",
+          title: "Order line return rate",
+          measure: "Order lines",
+          filters,
+          points: total ? [
+            { label: "Returned through the end of the period", value: returned },
+            { label: "Order lines placed in the period", value: total },
+          ] : [],
+        };
+      }
+      const breakdown = returnBreakdown(orders, filters);
       return {
-        kind: "bars",
-        title: "Returned lines by return date",
+        kind: breakdown ? "ranking" : "bars",
+        title: breakdown ? filters.groupBy === "returnReason" ? "Returns by reason" : "Returns by product" :
+          "Returned lines by return date",
         measure: "Returned lines",
         filters,
-        points: returnedLinesByDay(orders, filters).map(([label, value]) => ({ label, value })),
+        points: (breakdown ?? returnedLinesByDay(orders, filters)).map(([label, value]) => ({ label, value })),
         returns: returnedLineDetails(orders, filters),
       };
+    }
     case "repeatCustomers": {
       const { repeatCustomers: repeat, totalCustomers } = result.value;
       return {

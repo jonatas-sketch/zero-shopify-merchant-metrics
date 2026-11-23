@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveDateRange } from "../lib/dates";
-import { bestSellers, repeatCustomers, returns, sales } from "../lib/metrics";
+import { bestSellers, orderLineReturnRate, repeatCustomers, returnBreakdown, returns, sales, salesBreakdown } from "../lib/metrics";
 import { parseStoreOrders } from "../lib/orders";
 
 const fixture = [
@@ -23,9 +23,30 @@ test("calendar dates use the exercise anchor and include both endpoints", () => 
   assert.deepEqual(resolveDateRange("last-month", "2024-03-04"), { startDate: "2024-02-01", endDate: "2024-02-29" });
   assert.deepEqual(resolveDateRange(), { startDate: "2025-09-28", endDate: "2025-10-27" });
   assert.deepEqual(resolveDateRange("completed-30-days"), { startDate: "2025-09-27", endDate: "2025-10-26" });
+  assert.deepEqual(resolveDateRange("since-labor-day"), { startDate: "2025-09-01", endDate: "2025-10-26" });
   assert.deepEqual(resolveDateRange("last-week", "2025-11-03"), { startDate: "2025-10-27", endDate: "2025-11-02" });
   assert.throws(() => sales(orders, { startDate: "2025-02-29", endDate: "2025-03-01" }));
   assert.throws(() => sales(orders, { startDate: "2025-03-02", endDate: "2025-03-01" }));
+});
+
+test("return breakdown uses return dates while rate measures the purchased cohort", () => {
+  assert.deepEqual(returnBreakdown(orders, { ...lastWeek, groupBy: "returnedProduct" }), [["Jacket", 1]]);
+  assert.deepEqual(orderLineReturnRate(orders, lastWeek), { returned: 0, total: 3 });
+  assert.deepEqual(orderLineReturnRate(orders, { ...lastWeek, endDate: "2025-10-27" }), {
+    returned: 1,
+    total: 3,
+  });
+  assert.deepEqual(orderLineReturnRate(orders, { ...lastWeek, category: "Boots" }), { returned: 0, total: 0 });
+});
+
+test("sales breakdown keeps channel filters and uses week starts inside the selected range", () => {
+  const byChannel = orders.map((row) => ({
+    ...row, sales_channel: row.order_id === "b" ? "Online Store" : "Point of Sale",
+  }));
+  assert.deepEqual(salesBreakdown(byChannel, { ...lastWeek, groupBy: "channel", channels: ["Online Store"] }),
+    [["Online Store", 1599]]);
+  assert.deepEqual(salesBreakdown(orders, { startDate: "2025-10-19", endDate: lastWeek.endDate, groupBy: "week" }),
+    [["2025-10-19", 1000], ["2025-10-20", 2299]]);
 });
 
 test("sales, product ranking and repeat customers group the right records", () => {
