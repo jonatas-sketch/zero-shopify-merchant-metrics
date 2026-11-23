@@ -72,6 +72,7 @@ function ChartCard({ chart }: { chart: MetricChart }) {
         <span>{filters.startDate} to {filters.endDate}</span>
         {filters.product && <span>Product: {filters.product}</span>}
         {filters.category && <span>Category: {filters.category}</span>}
+        {filters.channel && <span>Channel: {filters.channel}</span>}
       </figcaption>
       {points.length === 0 ? <p>No records matched these filters.</p> : (
         <>

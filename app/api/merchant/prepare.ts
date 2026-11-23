@@ -21,7 +21,11 @@ export async function prepareMerchantRequest(request: Request) {
     return {
       question: input.data.question,
       orders: await loadStoreOrders(),
-      model: createOpenRouter({ apiKey }).chat(modelId, { parallelToolCalls: false }),
+      model: createOpenRouter({ apiKey }).chat(modelId, {
+        parallelToolCalls: false,
+        reasoning: { enabled: true, effort: "minimal" },
+        temperature: 0,
+      }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]),
     };
   } catch (error) {

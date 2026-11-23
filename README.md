@@ -22,17 +22,18 @@ npm run dev
 | `returns` | `return_date` | Count returned order lines and sum refunds. The CSV does not report units returned. |
 | `repeatCustomers` | `order_date` | Count distinct customers and those flagged as repeat. Use an unavailable rate when there are no customers. |
 
-All metric inputs use inclusive ISO dates and accept optional exact product ID or title and category filters. Sales and refunds are tracked separately because their reporting dates differ.
+All metric inputs use inclusive ISO dates and accept optional exact product IDs or titles, categories, and sales channels. The Jackets and Winter Jackets groups match garment names within Outerwear. Sales and refunds are tracked separately because their reporting dates differ.
 
-The exercise anchor is 2025-10-31. The resolver uses calendar dates in UTC and weeks begin on Monday.
+The stage 1 submission used 2025-10-31 as its exercise anchor. The dashboard acceptance branch uses 2025-10-27, the cutoff in the acceptance workbook and the latest order date in the sample. The resolver uses calendar dates in UTC and weeks begin on Monday.
 
 | Question uses | Inclusive range at this anchor |
 | --- | --- |
 | Last week | October 20–26 |
-| This week | October 27–31 |
-| This month | October 1–31 |
+| This week | October 27 |
+| This month | October 1–27 |
 | Last month | September 1–30 |
-| No date | October 2–31 |
+| Last 30 completed days | September 27–October 26 |
+| No date or vague date | September 28–October 27 |
 
 ## Prompt and review
 
@@ -86,7 +87,7 @@ The metric descriptions are based on the merchant questions from the exercise:
 | Returns | “How many jacket order lines came back last week?” | Returned lines and total refunds using return dates, optionally scoped to the requested product or category. |
 | Repeat customers | “How many customers came back?” | Distinct repeat customers, total customers, and the repeat share in the requested window. |
 
-The Vercel AI SDK's `streamText` lets the model pick one tool and supply required ISO dates. The route disables parallel tool calls and enforces one metric execution on the server. A second model step streams the explanation with tool calls disabled. If the question needs multiple metrics or date ranges, the route asks the merchant to choose one. The provider receives the question and aggregate tool output. Order and customer records stay on the server.
+The Vercel AI SDK's `streamText` lets the model pick one tool and supply required ISO dates. The route disables parallel tool calls and enforces one metric execution on the server. A second model step streams the explanation with tool calls disabled. When several metrics are requested for one period, the dashboard shows the first supported report. The provider receives the question and aggregate tool output. Order and customer records stay on the server.
 
 ```sh
 curl -fNsS http://localhost:3000/api/merchant/stream \
@@ -120,3 +121,30 @@ The local browser check with the live model showed four Outerwear returns from O
 > On submit, show a chart placeholder, announce that the report is being prepared, and offer a Stop control. Replace the placeholder as soon as the chart event arrives and keep streaming the explanation underneath.
 
 I verified the preparing state and return table in the browser. Live route checks also confirmed the sales line for October 20–26, the product ranking for October, and four repeat customers out of twelve for October.
+
+## Deployment and acceptance
+
+The exercise requires a public Vercel URL. The deployment must read the original complete CSV, including returned lines. The Node.js runtime can load it from the sensitive server-only `SHOPIFY_ORDER_CSV_BASE64` variable, alongside the server-only `OPENROUTER_API_KEY` and the free `OPENROUTER_MODEL`. Do not commit those values or expose them to the browser.
+
+> Deploy the reviewed dashboard branch to a dedicated Vercel project with a public URL. Load the full course CSV server-side with returned rows included. Configure the sensitive OpenRouter key and the free model. Verify the public URL anonymously and run the winter jacket report and the acceptance questions. Record the URL, chart selection, exact filters, values, and seconds to first chart.
+
+```sh
+npm run verify:acceptance -- http://127.0.0.1:3000
+```
+
+The same command accepts the public URL when it is available. It checks the winter jacket question and seven acceptance cases. For questions outside the dataset, a clear no-data response is expected without a chart.
+
+### Local acceptance results
+
+The results below were collected against the original CSV on localhost. The public deployment and its timings have yet to be confirmed.
+
+| Test | Observed output | First chart |
+| --- | --- | ---: |
+| Winter jacket returns | Four returned lines from October 20–26, with matching table rows | 2.23 s |
+| AQ-01 | Online Store sales of 1,230.90 from September 27 through October 26 | 1.33 s |
+| AQ-02 | Ranking for the default range with 4, 4, and 3 units in the top three positions | 3.36 s |
+| AQ-03 | Four jacket return lines, October 20–26 | 2.69 s |
+| AQ-07 | No-data response for Meta ad spend | — |
+| AQ-08 | Six returns in the default range | 1.52 s |
+| AQ-10 | Four of twelve October customers were marked repeat | 1.72 s |
+| AQ-20 | No-data response for remaining inventory | — |

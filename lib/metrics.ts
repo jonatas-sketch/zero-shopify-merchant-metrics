@@ -3,6 +3,10 @@ import type { OrderLine } from "./orders";
 
 type DateColumn = "order_date" | "return_date";
 type ProductRanking = { productId: string; name: string; units: number; salesCents: number };
+const outerwearAliases = {
+  jackets: /\b(jacket|parka|shell)\b/i,
+  "winter jackets": /\b(insulated jacket|down parka)\b/i,
+};
 
 function eligibleOrders(
   orders: readonly OrderLine[],
@@ -12,15 +16,22 @@ function eligibleOrders(
   const dateRange = metricInputSchema.parse(input);
   const product = dateRange.product?.toLowerCase();
   const category = dateRange.category?.toLowerCase();
+  const channel = dateRange.channel?.toLowerCase();
+  const outerwearAlias = category && Object.hasOwn(outerwearAliases, category)
+    ? outerwearAliases[category as keyof typeof outerwearAliases]
+    : undefined;
 
   return orders.filter((row) => {
     const date = row[dateColumn];
     const matchesProduct = !product ||
       product === row.product_id.toLowerCase() ||
       product === row.product_title.toLowerCase();
-    const matchesCategory = !category || category === row.product_category.toLowerCase();
+    const productCategory = row.product_category.toLowerCase();
+    const matchesCategory = !category || category === productCategory ||
+      (productCategory === "outerwear" && outerwearAlias?.test(row.product_title));
+    const matchesChannel = !channel || channel === row.sales_channel?.toLowerCase();
     return date >= dateRange.startDate && date <= dateRange.endDate &&
-      matchesProduct && matchesCategory;
+      matchesProduct && matchesCategory && matchesChannel;
   });
 }
 

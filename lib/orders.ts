@@ -19,6 +19,7 @@ const orderLineSchema = z.object({
   product_id: z.string().min(1),
   product_title: z.string().min(1),
   product_category: z.string().min(1),
+  sales_channel: z.string().trim().optional(),
   variant: z.string().trim().optional(),
   quantity: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().positive()),
   line_total: money,
@@ -56,6 +57,10 @@ export function parseStoreOrders(csv: string): OrderLine[] {
 }
 
 export async function loadStoreOrders() {
+  const privateCSV = process.env.SHOPIFY_ORDER_CSV_BASE64;
+  if (privateCSV) {
+    return parseStoreOrders(Buffer.from(privateCSV, "base64").toString("utf8"));
+  }
   const source = resolve(process.env.SHOPIFY_ORDER_CSV ?? "data/store-orders.csv");
   return parseStoreOrders(await readFile(source, "utf8"));
 }

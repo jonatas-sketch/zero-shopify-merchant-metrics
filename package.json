@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "metrics": "tsx scripts/run-metrics.ts"
+    "metrics": "tsx scripts/run-metrics.ts",
+    "verify:acceptance": "tsx scripts/verify-acceptance.ts"
   },
   "keywords": [],
   "author": "",

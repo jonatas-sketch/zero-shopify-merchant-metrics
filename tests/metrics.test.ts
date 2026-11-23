@@ -17,11 +17,12 @@ const lastWeek = resolveDateRange("last-week");
 
 test("calendar dates use the exercise anchor and include both endpoints", () => {
   assert.deepEqual(lastWeek, { startDate: "2025-10-20", endDate: "2025-10-26" });
-  assert.deepEqual(resolveDateRange("this-month"), { startDate: "2025-10-01", endDate: "2025-10-31" });
-  assert.deepEqual(resolveDateRange("this-week"), { startDate: "2025-10-27", endDate: "2025-10-31" });
+  assert.deepEqual(resolveDateRange("this-month"), { startDate: "2025-10-01", endDate: "2025-10-27" });
+  assert.deepEqual(resolveDateRange("this-week"), { startDate: "2025-10-27", endDate: "2025-10-27" });
   assert.deepEqual(resolveDateRange("last-month", "2026-01-02"), { startDate: "2025-12-01", endDate: "2025-12-31" });
   assert.deepEqual(resolveDateRange("last-month", "2024-03-04"), { startDate: "2024-02-01", endDate: "2024-02-29" });
-  assert.deepEqual(resolveDateRange(), { startDate: "2025-10-02", endDate: "2025-10-31" });
+  assert.deepEqual(resolveDateRange(), { startDate: "2025-09-28", endDate: "2025-10-27" });
+  assert.deepEqual(resolveDateRange("completed-30-days"), { startDate: "2025-09-27", endDate: "2025-10-26" });
   assert.deepEqual(resolveDateRange("last-week", "2025-11-03"), { startDate: "2025-10-27", endDate: "2025-11-02" });
   assert.throws(() => sales(orders, { startDate: "2025-02-29", endDate: "2025-03-01" }));
   assert.throws(() => sales(orders, { startDate: "2025-03-02", endDate: "2025-03-01" }));

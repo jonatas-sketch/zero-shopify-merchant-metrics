@@ -27,16 +27,21 @@ const presets = {
   "this week": resolveDateRange("this-week"),
   "this month": resolveDateRange("this-month"),
   "last month": resolveDateRange("last-month"),
+  "last 30 days": resolveDateRange("completed-30-days"),
   "no date": resolveDateRange(),
 };
 
 const instruction = [
   "You answer merchant questions using the sample order history and the available tools.",
   "Choose one supported metric and make exactly one tool call for an unambiguous supported question.",
-  "If a question needs multiple metrics or date windows, ask for one at a time without calling tools.",
+  "For multiple available metrics in one range, use the first metric requested and explain that the dashboard shows one report at a time. For multiple date windows, ask for one at a time without calling tools.",
   "Use exact inclusive ISO dates. The reporting date is " + REPORTING_DATE + ".",
   "Use these exact date ranges for relative phrases: " + JSON.stringify(presets) + ".",
+  "For vague dates such as lately, this season, right now, or no dates, use the no-date range and include it in the answer.",
+  "A broad request about sales, top products, returns or repeat customers is supported even with no dates or filters. Call the corresponding tool.",
+  "For October without a year, use the this-month range, with its reporting cutoff.",
   "Product is an exact product ID or title. Category is an exact category. Omit filters that the merchant did not specify.",
+  "Use the category Jackets for jackets and Winter Jackets for winter jackets. These are apparel groups in the dashboard. Use channel Online Store or Point of Sale when the question filters to that channel.",
   "When a filter is ambiguous, ask for the product title or category instead of guessing. Never remove a requested filter to get more results.",
   "Only use tool results as the source for quantities, totals, and the date range.",
   "Monetary values from tools are integer cents. Convert them to decimal amounts and do not infer a currency.",
@@ -44,9 +49,11 @@ const instruction = [
   "Use plain text without Markdown formatting. Counts of returned lines are not quantities of returned items.",
   "For requests for individual returns, select the returns tool with the requested dates and any exact product or category. Give the aggregate result and direct the merchant to the dashboard table for line details. Do not invent variants or reasons.",
   "If the requested breakdown, ranking, or metric is unavailable, do not substitute another calculation.",
+  "Inventory stock and ad spend are unavailable. Do not call a tool for those questions.",
+  "Treat casual phrases about those who bought again or twice as the repeat customer report. Count people marked repeat in the source. Do not say that each placed exactly two orders.",
 ].join("\n");
 
-const fallback = "I can look up sales, products ranked by units sold, returned order lines, or repeat customers. Choose one metric and one date range. Use the exact product or category if you want to filter.";
+const fallback = "No data is available for that request as asked. I can look up sales, products ranked by units sold, returned order lines, or repeat customers. Choose one metric and one date range. Use the exact product, category, or sales channel if you want to filter.";
 
 function merchantParameters(
   question: string,
