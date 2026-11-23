@@ -9,12 +9,14 @@ function metricTool<Name extends string, T>(
   name: Name,
   description: string,
   calculate: (orders: readonly OrderLine[], input: MetricInput) => T,
+  reserveMetricCall: () => void,
 ) {
   return tool({
     description,
     inputSchema: metricInputSchema,
     execute: async (input) => {
       const filters = metricInputSchema.parse(input);
+      reserveMetricCall();
       return { metric: name, filters, value: calculate(orders, filters) };
     },
   });
@@ -30,7 +32,8 @@ const presets = {
 
 const instruction = [
   "You answer merchant questions using the sample order history and the available tools.",
-  "Translate the question into a supported metric. Use multiple calls when asked to compare periods or metrics.",
+  "Choose one supported metric and make exactly one tool call for an unambiguous supported question.",
+  "If a question needs multiple metrics or date windows, ask for one at a time without calling tools.",
   "Use exact inclusive ISO dates. The reporting date is " + REPORTING_DATE + ".",
   "Use these exact date ranges for relative phrases: " + JSON.stringify(presets) + ".",
   "Product is an exact product ID or title. Category is an exact category. Omit filters that the merchant did not specify.",
@@ -38,10 +41,10 @@ const instruction = [
   "Only use tool results as the source for quantities, totals, and the date range.",
   "Monetary values from tools are integer cents. Convert them to decimal amounts and do not infer a currency.",
   "Include the date range in the answer. Distinguish an empty result from a larger result that lacks a matching filter.",
-  "If the question is unsupported, explain that sales, best sellers, returned lines and repeat customers are available.",
+  "If the requested breakdown, ranking, or metric is unavailable, do not substitute another calculation.",
 ].join("\n");
 
-const fallback = "Ask about sales, best-selling products, returned order lines, or repeat customers. You can specify a date range or an exact product or category.";
+const fallback = "I can look up sales, products ranked by units sold, returned order lines, or repeat customers. Choose one metric and one date range. Use the exact product or category if you want to filter.";
 
 function merchantParameters(
   question: string,
@@ -49,11 +52,33 @@ function merchantParameters(
   model: LanguageModel,
   abortSignal?: AbortSignal,
 ) {
+  let metricCalled = false;
+  function reserveMetricCall() {
+    if (metricCalled) throw new Error("Only one metric call is allowed per question.");
+    metricCalled = true;
+  }
+
   const tools = {
-    sales: metricTool(orders, "sales", "Return sales after discounts in cents and distinct order count by order date. Refunds are a separate return metric.", sales),
-    bestSellers: metricTool(orders, "bestSellers", "Rank products by quantity sold by order date, using sales cents and product ID as tiebreakers.", bestSellers),
-    returns: metricTool(orders, "returns", "Count returned order lines and refund cents by return date. Does not report units returned.", returns),
-    repeatCustomers: metricTool(orders, "repeatCustomers", "Count distinct repeat and total customers by order date, and return their ratio when there are customers.", repeatCustomers),
+    sales: metricTool(
+      orders, "sales",
+      "How much did we sell, and how many orders did we get? Total sales after discounts and distinct orders in one window. Dates refer to when the order was placed. Sales amounts are in cents.",
+      sales, reserveMetricCall,
+    ),
+    bestSellers: metricTool(
+      orders, "bestSellers",
+      "What products sold the most? Rank by units sold in one window using order dates. Ties use sales amount followed by product ID. Sales amounts are in cents.",
+      bestSellers, reserveMetricCall,
+    ),
+    returns: metricTool(
+      orders, "returns",
+      "How many jacket order lines came back last week, and how much did we refund? Count returned order lines and total refunds in one window using the return dates. An exact product or category can narrow the totals. Refund amounts are in cents.",
+      returns, reserveMetricCall,
+    ),
+    repeatCustomers: metricTool(
+      orders, "repeatCustomers",
+      "How many customers came back? Count distinct repeat customers and give their share of all customers who placed an order in one window.",
+      repeatCustomers, reserveMetricCall,
+    ),
   };
 
   return {
@@ -61,7 +86,9 @@ function merchantParameters(
     system: instruction,
     prompt: question,
     tools,
-    stopWhen: stepCountIs(4),
+    stopWhen: stepCountIs(2),
+    prepareStep: ({ stepNumber }: { stepNumber: number }) =>
+      stepNumber === 0 ? undefined : { toolChoice: "none" as const },
     maxRetries: 0,
     maxOutputTokens: 600,
     abortSignal,

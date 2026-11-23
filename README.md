@@ -34,8 +34,6 @@ The exercise anchor is 2025-10-31. The resolver uses calendar dates in UTC and w
 | Last month | September 1–30 |
 | No date | October 2–31 |
 
-This stage prepares the tool inputs and outputs for the model and streaming charts in later stages.
-
 ## Prompt and review
 
 The instruction proposed to Erik was to create a Next.js App Router project in TypeScript, validate the CSV server-side and write one pure function per metric with inclusive dates and optional product filters. The instruction also specified integer cents, a separate date resolver and tests for boundary dates and empty ranges.
@@ -77,22 +75,31 @@ Four automated tests cover the calendar resolver, date and filter boundaries, gr
 
 ## OpenRouter integration
 
-This branch adds a server-side API for merchant questions. Set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` for a model with tool calling in the server environment. Configure the course CSV as above before starting Next.js.
+This branch adds server-side APIs for merchant questions. Create a local `.env.local` file with owner-only permissions. Set `OPENROUTER_API_KEY` to your OpenRouter key and `OPENROUTER_MODEL` to `nvidia/nemotron-3.5-lightning:free`, the tool-capable model used for the live check. Configure the course CSV as above, then restart Next.js. The key and CSV are Git-ignored.
+
+The metric descriptions are based on the merchant questions from the exercise:
+
+| Metric | Merchant question | Tool result |
+| --- | --- | --- |
+| Sales | “How much did we sell, and how many orders did we get?” | Sales after discounts and distinct orders using order dates. The chart shows sales by day. |
+| Best sellers | “What products sold the most?” | Products ranked by units sold. Sales break ties before product ID. |
+| Returns | “How many jacket order lines came back last week?” | Returned lines and total refunds using return dates, optionally scoped to the requested product or category. |
+| Repeat customers | “How many customers came back?” | Distinct repeat customers, total customers, and the repeat share in the requested window. |
+
+The Vercel AI SDK's `streamText` lets the model pick one tool and supply required ISO dates. The route disables parallel tool calls and enforces one metric execution on the server. A second model step streams the explanation with tool calls disabled. If the question needs multiple metrics or date ranges, the route asks the merchant to choose one. The provider receives the question and aggregate tool output. Order and customer records stay on the server.
 
 ```sh
-curl -fsS http://localhost:3000/api/merchant \
+curl -fNsS http://localhost:3000/api/merchant/stream \
   -H 'Content-Type: application/json' \
-  -d '{"question":"What were last week’s outerwear returns?"}'
+  -d '{"question":"How many Outerwear order lines were returned last week?"}'
 ```
 
-The response contains an answer alongside structured tool results. Each tool result includes its exact date range, optional filters and computed metric. The API sends the merchant question and aggregate tool results to OpenRouter. The order history is read locally.
+The live OpenRouter run returned one chart event with `startDate: 2025-10-20`, `endDate: 2025-10-26`, and `category: Outerwear`. It showed one returned line each on October 21, 23, 24 and 26, followed by the streamed answer reporting four lines and a completion event.
 
-The OpenRouter test supplies recorded-shaped chat completions through the SDK's test transport. It exercises the full tool call and follow-up message without contacting OpenRouter. The route checks and production build run locally. A live model run and submission in Zero are still pending.
+Automated tests use a simulated OpenRouter transport and cover the tool call, the follow-up response, the one-call limit, API validation and incremental stream parsing. The production build and live route were also verified locally.
 
 ## Streaming charts
 
 The dashboard accepts a merchant's question and sends it to `POST /api/merchant/stream` as JSON. The response delivers newline-delimited chart, answer, error and completion events. Charts use the result of the selected metric function and appear as soon as its data arrives. The answer can continue streaming after the chart is shown.
 
-Sales are grouped by order date, returned lines by return date, best sellers by product and repeat customers by customer cohort. Each chart displays its exact period and filters and provides a table of the numeric values. The original non-streaming API remains available.
-
-The local browser check used the course CSV and a simulated OpenRouter tool call for outerwear returns on October 20–26. The chart appeared before the simulated answer and showed one returned line each on October 21, 23, 24 and 26. Live OpenRouter verification is pending.
+Sales are grouped by order date, returned lines by return date, best sellers by product and repeat customers by customer cohort. Each chart displays its exact period and filters and provides a table of the numeric values. The original `POST /api/merchant` route remains available for a single JSON response with the answer and metric result.

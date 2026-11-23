@@ -52,6 +52,7 @@ test("OpenRouter conversation calls a metric and sends only the aggregate tool r
       assert.match(body, /refundCents/);
       assert.match(body, /999/);
       assert.match(body, /returnedLines/);
+      assert.equal(calls[1].tool_choice, "none");
       return reply({ content: "One returned line and 9.99 refunded from October 20 to 26." }, "stop");
     },
   }).chat("mock/merchant-model");
@@ -68,6 +69,25 @@ test("OpenRouter conversation calls a metric and sends only the aggregate tool r
     value: { returnedLines: 1, refundCents: 999 },
   }]);
   assert.match(result.answer, /October 20 to 26/);
+});
+
+test("a model proposing parallel calls can execute only one metric", async () => {
+  const args = JSON.stringify({ startDate: "2025-10-20", endDate: "2025-10-26" });
+  let calls = 0;
+  const model = createOpenRouter({
+    apiKey: "fixture-key",
+    fetch: async () => ++calls === 1 ? reply({
+      content: null,
+      tool_calls: ["returns", "sales"].map((name) => ({
+        id: name + "-fixture",
+        type: "function",
+        function: { name, arguments: args },
+      })),
+    }, "tool_calls") : reply({ content: "One returned line." }, "stop"),
+  }).chat("mock/merchant-model");
+
+  const result = await answerMerchantQuestion("What came back last week?", orders, model);
+  assert.deepEqual(result.metrics.map(({ metric }) => metric), ["returns"]);
 });
 
 test("an unsupported question cannot render an ungrounded model total", async () => {

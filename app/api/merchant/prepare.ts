@@ -21,8 +21,8 @@ export async function prepareMerchantRequest(request: Request) {
     return {
       question: input.data.question,
       orders: await loadStoreOrders(),
-      model: createOpenRouter({ apiKey }).chat(modelId),
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]),
+      model: createOpenRouter({ apiKey }).chat(modelId, { parallelToolCalls: false }),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]),
     };
   } catch (error) {
     console.error("Could not prepare merchant reporting.", error instanceof Error ? error.name : "UnknownError");
