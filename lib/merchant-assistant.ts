@@ -1,6 +1,6 @@
 import { generateText, stepCountIs, streamText, tool, type LanguageModel } from "ai";
 import { metricInputSchema, REPORTING_DATE, resolveDateRange, type MetricInput } from "./dates";
-import { bestSellers, repeatCustomers, returnedLinesByDay, returns, sales, salesByDay } from "./metrics";
+import { bestSellers, repeatCustomers, returnedLineDetails, returnedLinesByDay, returns, sales, salesByDay } from "./metrics";
 import type { OrderLine } from "./orders";
 import type { MerchantStreamEvent, MetricChart } from "./merchant-stream";
 
@@ -41,6 +41,8 @@ const instruction = [
   "Only use tool results as the source for quantities, totals, and the date range.",
   "Monetary values from tools are integer cents. Convert them to decimal amounts and do not infer a currency.",
   "Include the date range in the answer. Distinguish an empty result from a larger result that lacks a matching filter.",
+  "Use plain text without Markdown formatting. Counts of returned lines are not quantities of returned items.",
+  "For requests for individual returns, select the returns tool with the requested dates and any exact product or category. Give the aggregate result and direct the merchant to the dashboard table for line details. Do not invent variants or reasons.",
   "If the requested breakdown, ranking, or metric is unavailable, do not substitute another calculation.",
 ].join("\n");
 
@@ -120,6 +122,7 @@ function chartFor(orders: readonly OrderLine[], result: MetricResult): MetricCha
   switch (result.metric) {
     case "sales":
       return {
+        kind: "line",
         title: "Sales by order date",
         measure: "Amount after discounts",
         filters,
@@ -127,28 +130,31 @@ function chartFor(orders: readonly OrderLine[], result: MetricResult): MetricCha
       };
     case "bestSellers":
       return {
+        kind: "ranking",
         title: "Best-selling products",
         measure: "Units sold",
         filters,
-        horizontal: true,
         points: result.value.map(({ name, units, productId }) => ({ label: name, id: productId, value: units })),
       };
     case "returns":
       return {
+        kind: "bars",
         title: "Returned lines by return date",
         measure: "Returned lines",
         filters,
         points: returnedLinesByDay(orders, filters).map(([label, value]) => ({ label, value })),
+        returns: returnedLineDetails(orders, filters),
       };
     case "repeatCustomers": {
       const { repeatCustomers: repeat, totalCustomers } = result.value;
       return {
+        kind: "metric",
         title: "Repeat customers",
         measure: "Customers",
         filters,
         points: totalCustomers ? [
-          { label: "Repeat", value: repeat },
-          { label: "Other", value: totalCustomers - repeat },
+          { label: "Repeat customers", value: repeat },
+          { label: "All customers", value: totalCustomers },
         ] : [],
       };
     }

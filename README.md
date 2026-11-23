@@ -102,4 +102,21 @@ Automated tests use a simulated OpenRouter transport and cover the tool call, th
 
 The dashboard accepts a merchant's question and sends it to `POST /api/merchant/stream` as JSON. The response delivers newline-delimited chart, answer, error and completion events. Charts use the result of the selected metric function and appear as soon as its data arrives. The answer can continue streaming after the chart is shown.
 
-Sales are grouped by order date, returned lines by return date, best sellers by product and repeat customers by customer cohort. Each chart displays its exact period and filters and provides a table of the numeric values. The original `POST /api/merchant` route remains available for a single JSON response with the answer and metric result.
+| Report | Visualization | Merchant decision |
+| --- | --- | --- |
+| Sales | Line on a calendar axis | Spot changes in sales after discounts over the requested period. |
+| Best sellers | Horizontal ranking bars | Compare units sold while keeping product labels readable. |
+| Returns | Daily bars and a returned-line table | To investigate a spike, see each product, variant, return date, reason and refund. |
+| Repeat customers | Metric card | Read the repeat share and its numerator and denominator for one period. |
+
+The loading message and placeholder appear as soon as a report starts. The first chart event replaces the placeholder and the status changes while the answer streams below. Empty or unsupported requests show a message, and in-flight requests can be stopped. Each report shows its exact dates and filters and provides a table of the plotted numeric values.
+
+The local browser check with the live model showed four Outerwear returns from October 20 through 26, 2025. The return table used the same filters as the chart. It was built from the local CSV and excludes order and customer IDs. Only the aggregate tool result reaches OpenRouter. The original `POST /api/merchant` route remains available for a single JSON response with the answer and metric result.
+
+### Dashboard implementation prompt
+
+> Build a merchant reporting dashboard page where a merchant enters a plain-language question and every supported answer renders its metric visualization directly in chat before the streamed text explanation. Use a line for sales, bars for rankings and returns, a returned-line table for row detail, and a metric card for repeat share. Show the exact range and filters on every visualization.
+>
+> On submit, show a chart placeholder, announce that the report is being prepared, and offer a Stop control. Replace the placeholder as soon as the chart event arrives and keep streaming the explanation underneath.
+
+I verified the preparing state and return table in the browser. Live route checks also confirmed the sales line for October 20–26, the product ranking for October, and four repeat customers out of twelve for October.

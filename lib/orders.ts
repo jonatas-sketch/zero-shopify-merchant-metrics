@@ -19,10 +19,12 @@ const orderLineSchema = z.object({
   product_id: z.string().min(1),
   product_title: z.string().min(1),
   product_category: z.string().min(1),
+  variant: z.string().trim().optional(),
   quantity: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().positive()),
   line_total: money,
   returned: bool,
   return_date: z.union([z.literal(""), z.iso.date()]),
+  return_reason: z.string().trim().optional(),
   refund_amount: z.union([z.literal("").transform(() => 0), money]),
 }).refine((row) => row.returned === Boolean(row.return_date), {
   path: ["return_date"],

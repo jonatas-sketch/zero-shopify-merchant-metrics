@@ -21,15 +21,16 @@ function completion(chunks: { delta: object; finishReason?: string }[]) {
 
 test("stream exposes a calculated chart before the model finishes writing", async () => {
   const orders = parseStoreOrders([
-    "order_id,line_item_id,order_date,customer_id,is_repeat_customer,product_id,product_title,product_category,quantity,line_total,returned,return_date,refund_amount",
-    "demo-a,one,2025-10-12,c1,false,j,Jacket,Outerwear,1,9.99,true,2025-10-21,9.99",
-    "demo-b,two,2025-10-25,c1,true,h,Hat,Accessories,2,10.00,false,,0.00",
+    "order_id,line_item_id,order_date,customer_id,is_repeat_customer,product_id,product_title,product_category,quantity,line_total,returned,return_date,refund_amount,variant,return_reason",
+    "demo-a,one,2025-10-12,c1,false,j,Jacket,Outerwear,1,9.99,true,2025-10-21,9.99,Blue / M,Fit",
+    "demo-b,two,2025-10-25,c1,true,h,Hat,Accessories,2,10.00,false,,0.00,,",
   ].join("\n"));
   let requests = 0;
   const model = createOpenRouter({
     apiKey: "fixture-key",
-    fetch: async () => {
+    fetch: async (_url, options) => {
       requests++;
+      assert.doesNotMatch(String(options?.body), /Blue \/ M|demo-a|return_reason/);
       return requests === 1 ? completion([
         { delta: { role: "assistant", tool_calls: [{
           id: "returns-fixture", index: 0, type: "function",
@@ -48,10 +49,12 @@ test("stream exposes a calculated chart before the model finishes writing", asyn
     type: "chart",
     id: "returns-fixture",
     chart: {
+      kind: "bars",
       title: "Returned lines by return date",
       measure: "Returned lines",
       filters: { startDate: "2025-10-20", endDate: "2025-10-26", category: "Outerwear" },
       points: [{ label: "2025-10-21", value: 1 }],
+      returns: [{ product: "Jacket", variant: "Blue / M", returnedOn: "2025-10-21", reason: "Fit", refundCents: 999 }],
     },
   });
   assert.deepEqual((await first.next()).value, { type: "text", text: "One outerwear line was returned." });

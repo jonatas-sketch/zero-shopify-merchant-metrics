@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { readMerchantStream, type MetricChart } from "../lib/merchant-stream";
 
 const examples = [
   "What were sales last week?",
   "What were the best sellers this month?",
-  "How many outerwear items were returned last week?",
+  "How many Outerwear order lines were returned last week?",
   "How many repeat customers did we have this month?",
 ];
 
@@ -15,10 +15,55 @@ function formatValue(value: number) {
   return value.toLocaleString("en", { maximumFractionDigits: 2 });
 }
 
+const dayMs = 86_400_000;
+const toDay = (date: string) => Date.parse(date) / dayMs;
+const fromDay = (day: number) => new Date(day * dayMs).toISOString().slice(0, 10);
+const formatDay = (label: string) => label.slice(5);
+const shortenProduct = (label: string) => label.length > 20 ? label.slice(0, 18) + "…" : label;
+const formatMeasure = (measure: string) => (value: unknown) =>
+  [typeof value === "number" ? formatValue(value) : String(value), measure];
+
+function ChartPlot({ chart }: { chart: MetricChart }) {
+  const { kind, points, measure, filters } = chart;
+  if (kind === "metric") {
+    const repeat = points[0].value;
+    const total = points[1].value;
+    return <div className="repeat-metric">
+      <strong>{(repeat / total).toLocaleString("en", { style: "percent", maximumFractionDigits: 1 })}</strong>
+      <span>{repeat} of {total} customers were repeat customers</span>
+    </div>;
+  }
+
+  if (kind === "line") {
+    const days = points.map(({ label, value }) => ({ day: toDay(label), value }));
+    return <ResponsiveContainer width="100%" height={250}>
+      <LineChart data={days} margin={{ right: 12 }}>
+        <CartesianGrid stroke="#d9e3db" />
+        <XAxis dataKey="day" type="number" domain={[toDay(filters.startDate), toDay(filters.endDate)]}
+          allowDecimals={false} tickFormatter={(day) => formatDay(fromDay(day))} />
+        <YAxis type="number" width={65} tickFormatter={formatValue} />
+        <Tooltip labelFormatter={(day) => fromDay(Number(day))} formatter={formatMeasure(measure)} />
+        <Line dataKey="value" stroke="#286948" strokeWidth={2} dot isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>;
+  }
+
+  const ranking = kind === "ranking";
+  return <ResponsiveContainer width="100%" height={ranking ? Math.max(180, points.length * 33 + 40) : 250}>
+    <BarChart data={points} layout={ranking ? "vertical" : "horizontal"} margin={{ right: 12 }}>
+      <CartesianGrid horizontal={!ranking} vertical={ranking} stroke="#d9e3db" />
+      {ranking
+        ? <><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="label" width={122} tickFormatter={shortenProduct} /></>
+        : <><XAxis type="category" dataKey="label" tickFormatter={formatDay} /><YAxis type="number" width={55} allowDecimals={false} tickFormatter={formatValue} /></>}
+      <Tooltip formatter={formatMeasure(measure)} />
+      <Bar dataKey="value" name={measure} fill="#286948" isAnimationActive={false} />
+    </BarChart>
+  </ResponsiveContainer>;
+}
+
 function ChartCard({ chart }: { chart: MetricChart }) {
-  const { title, measure, points, filters, horizontal } = chart;
-  const formatDay = (label: string) => /^\d{4}-\d\d-\d\d$/.test(label) ? label.slice(5) : label;
-  const shortenProduct = (label: string) => label.length > 20 ? label.slice(0, 18) + "…" : label;
+  const { title, measure, points, filters, kind } = chart;
+  const rowLabel = kind === "ranking" ? "Product" : kind === "metric" ? "Cohort" : "Date";
 
   return (
     <figure className="merchant-chart">
@@ -30,27 +75,35 @@ function ChartCard({ chart }: { chart: MetricChart }) {
       </figcaption>
       {points.length === 0 ? <p>No records matched these filters.</p> : (
         <>
-          <div role="img" aria-label={`${title}. ${measure}.`}>
-            <ResponsiveContainer width="100%" height={horizontal ? Math.max(180, points.length * 33 + 40) : 250}>
-              <BarChart data={points} layout={horizontal ? "vertical" : "horizontal"} margin={{ right: 12 }}>
-                <CartesianGrid horizontal={!horizontal} vertical={!!horizontal} stroke="#d9e3db" />
-                {horizontal
-                  ? <><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="label" width={122} tickFormatter={shortenProduct} /></>
-                  : <><XAxis type="category" dataKey="label" tickFormatter={formatDay} /><YAxis type="number" width={65} allowDecimals={points.some((point) => !Number.isInteger(point.value))} tickFormatter={formatValue} /></>}
-                <Tooltip formatter={(value) => [typeof value === "number" ? formatValue(value) : String(value), measure]} />
-                <Bar dataKey="value" name={measure} fill="#286948" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {kind === "metric" ? <ChartPlot chart={chart} /> :
+            <div role="img" aria-label={`${title}. ${measure}.`}><ChartPlot chart={chart} /></div>}
           <details>
             <summary>View exact values</summary>
             <table>
-              <thead><tr><th scope="col">Category or date</th><th scope="col">{measure}</th></tr></thead>
+              <thead><tr><th scope="col">{rowLabel}</th><th scope="col">{measure}</th></tr></thead>
               <tbody>{points.map(({ id, label, value }) =>
                 <tr key={id ?? label}><th scope="row">{label}</th><td>{formatValue(value)}</td></tr>
               )}</tbody>
             </table>
           </details>
+          {chart.returns?.length ? (
+            <div className="returns-table">
+              <table>
+                <caption>Returned order lines</caption>
+                <thead><tr>
+                  {["Product", "Variant", "Return date", "Reason", "Refund"].map((label) =>
+                    <th key={label} scope="col">{label}</th>)}
+                </tr></thead>
+                <tbody>{chart.returns.map(({ product, variant, returnedOn, reason, refundCents }, index) =>
+                  <tr key={index}>
+                    <th scope="row">{product}</th><td>{variant ?? "Unavailable"}</td><td>{returnedOn}</td>
+                    <td>{reason ?? "Unavailable"}</td><td>{(refundCents / 100).toLocaleString("en", {
+                      minimumFractionDigits: 2, maximumFractionDigits: 2,
+                    })}</td>
+                  </tr>)}</tbody>
+              </table>
+            </div>
+          ) : null}
         </>
       )}
     </figure>
@@ -130,11 +183,14 @@ export function MerchantQuestion() {
         </li>)}
       </ul>
       <p role="status" className="merchant-status">
-        {status === "working" ? "Reading order history…" : status === "cancelled" ? "Response stopped." : ""}
+        {status === "working" ? (charts.length ? "Writing the explanation…" : "Preparing your report…") :
+          status === "cancelled" ? "Response stopped." : ""}
       </p>
       {error && <p role="alert">{error}</p>}
+      {status === "working" && charts.length === 0 &&
+        <div className="chart-loading" aria-hidden="true"><span /><span /><span /><span /><span /></div>}
       {charts.map(({ id, chart }) => <ChartCard key={id} chart={chart} />)}
-      {answer && <p className="merchant-answer">{answer}</p>}
+      {answer && <p className="merchant-answer">{answer.replaceAll("**", "").replace(/\$(?=\d)/g, "")}</p>}
     </section>
   );
 }

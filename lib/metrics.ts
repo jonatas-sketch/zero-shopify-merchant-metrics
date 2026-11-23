@@ -75,6 +75,18 @@ export function returnedLinesByDay(orders: readonly OrderLine[], input: MetricIn
   return [...totals].sort(([a], [b]) => a.localeCompare(b));
 }
 
+export function returnedLineDetails(orders: readonly OrderLine[], input: MetricInput) {
+  return eligibleOrders(orders, input, "return_date")
+    .map((row) => ({
+      product: row.product_title,
+      variant: row.variant || null,
+      returnedOn: row.return_date,
+      reason: row.return_reason || null,
+      refundCents: row.refund_amount,
+    }))
+    .sort((a, b) => a.returnedOn.localeCompare(b.returnedOn) || a.product.localeCompare(b.product));
+}
+
 export function repeatCustomers(orders: readonly OrderLine[], input: MetricInput) {
   const eligible = eligibleOrders(orders, input, "order_date");
   const customers = new Set(eligible.map((row) => row.customer_id));

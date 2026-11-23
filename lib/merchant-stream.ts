@@ -1,11 +1,13 @@
 import type { MetricInput } from "./dates";
+import type { returnedLineDetails } from "./metrics";
 
 export type MetricChart = {
   title: string;
   measure: string;
   filters: MetricInput;
-  horizontal?: boolean;
+  kind: "line" | "ranking" | "bars" | "metric";
   points: { id?: string; label: string; value: number }[];
+  returns?: ReturnType<typeof returnedLineDetails>;
 };
 
 export type MerchantStreamEvent =
