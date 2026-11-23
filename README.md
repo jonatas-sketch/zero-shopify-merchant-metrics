@@ -132,8 +132,28 @@ The exercise requires a public Vercel URL. The deployment must read the original
 npm run verify:acceptance -- http://127.0.0.1:3000
 ```
 
-The command accepts the public URL when it is available. It checks the winter jacket question and all 20 acceptance cases. Pass an optional list of case IDs after the URL to retry specific questions. Out-of-scope questions should give a clear no-data response. Supported questions with an empty result keep the chosen filters and show an empty state.
+The command checks the winter jacket question and all 20 acceptance cases against the URL supplied. Pass an optional list of case IDs after the URL to retry specific questions. Out-of-scope questions should give a clear no-data response. Supported questions with an empty result keep the chosen filters and show an empty state.
+
+### Public dashboard and live acceptance
+
+[Open the public dashboard on Vercel](https://zero-shopify-merchant-metrics.vercel.app). The reviewer can open it anonymously. The original course CSV and OpenRouter key are Vercel Production secrets. The deployed runtime was built from commit `2131416`.
+
+The winter-jacket prompt returned four lines during October 20–26, 2025, with the first chart event in **2.15 seconds**. The tooltip shows the three Alpine Down Parka lines and the adjacent bar shows one Northridge Insulated Jacket line.
+
+![Public winter jacket returns chart with tooltip and exact dates](docs/winter-jacket-returns.png)
+
+| Check | Observed on the public dashboard | First chart event |
+| --- | --- | ---: |
+| AQ-02 | The vague seasonal question used September 28–October 27 and showed the best-sellers ranking. | 1.34 s |
+| AQ-03 | Four jacket returns in October 20–26, with the product chart and returned-line table. | 1.80 s |
+| AQ-04 | Four of twelve customers were repeat buyers in the default period, with a note on what the snapshot can establish. | 2.40 s |
+| AQ-05 | The paired request showed the first report, jacket sales of 356.10 for October 20–26. | 1.92 s |
+| AQ-07 | Meta ad spend returned a clear no-data message. | No chart expected |
+
+The complete live run covered all 20 workbook questions. Fifteen met the checks on the first pass. AQ-09 and AQ-12 had correct results at 6.61 and 6.81 seconds. AQ-15, AQ-17 and AQ-18 reported interruptions. All five passed on the targeted retry, with first charts in 1.44–3.08 seconds. The timing comes from the first chart event in the public response stream. The winter-jacket chart, tooltip and returned-line table were also verified in Chromium.
+
+I checked that the archived deployment contained only tracked project files before setting the two server secrets. I verified the public route anonymously and kept the first-pass exceptions alongside the follow-up results.
 
 ### Local acceptance results
 
-The latest localhost run with the original CSV produced the expected report or no-data outcome for all 20 workbook cases. Three charts arrived above the five-second target. AQ-01 took 6.54 seconds, AQ-03 took 8.27 seconds, and AQ-06 took 37.00 seconds. The separate winter-jacket report showed four returns and appeared in 1.46 seconds. The browser also rendered both sales channels and the no-records state for boots. The release built from a clean archive without the CSV or the OpenRouter key. Public deployment and public timings are pending.
+The latest localhost run with the original CSV produced the expected report or no-data outcome for all 20 workbook cases. Three charts arrived above the five-second target. AQ-01 took 6.54 seconds, AQ-03 took 8.27 seconds, and AQ-06 took 37.00 seconds. The separate winter-jacket report showed four returns and appeared in 1.46 seconds. The browser also rendered both sales channels and the no-records state for boots. The release built from a clean archive without the CSV or the OpenRouter key.
