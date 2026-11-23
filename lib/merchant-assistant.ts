@@ -1,10 +1,12 @@
-import { generateText, stepCountIs, tool, type LanguageModel } from "ai";
+import { generateText, stepCountIs, streamText, tool, type LanguageModel } from "ai";
 import { metricInputSchema, REPORTING_DATE, resolveDateRange, type MetricInput } from "./dates";
-import { bestSellers, repeatCustomers, returns, sales } from "./metrics";
+import { bestSellers, repeatCustomers, returnedLinesByDay, returns, sales, salesByDay } from "./metrics";
 import type { OrderLine } from "./orders";
+import type { MerchantStreamEvent, MetricChart } from "./merchant-stream";
 
-function metricTool<T>(
+function metricTool<Name extends string, T>(
   orders: readonly OrderLine[],
+  name: Name,
   description: string,
   calculate: (orders: readonly OrderLine[], input: MetricInput) => T,
 ) {
@@ -13,7 +15,7 @@ function metricTool<T>(
     inputSchema: metricInputSchema,
     execute: async (input) => {
       const filters = metricInputSchema.parse(input);
-      return { filters, value: calculate(orders, filters) };
+      return { metric: name, filters, value: calculate(orders, filters) };
     },
   });
 }
@@ -39,20 +41,22 @@ const instruction = [
   "If the question is unsupported, explain that sales, best sellers, returned lines and repeat customers are available.",
 ].join("\n");
 
-export async function answerMerchantQuestion(
+const fallback = "Ask about sales, best-selling products, returned order lines, or repeat customers. You can specify a date range or an exact product or category.";
+
+function merchantParameters(
   question: string,
   orders: readonly OrderLine[],
   model: LanguageModel,
   abortSignal?: AbortSignal,
 ) {
   const tools = {
-    sales: metricTool(orders, "Return sales after discounts in cents and distinct order count by order date. Refunds are a separate return metric.", sales),
-    bestSellers: metricTool(orders, "Rank products by quantity sold by order date, using sales cents and product ID as tiebreakers.", bestSellers),
-    returns: metricTool(orders, "Count returned order lines and refund cents by return date. Does not report units returned.", returns),
-    repeatCustomers: metricTool(orders, "Count distinct repeat and total customers by order date, and return their ratio when there are customers.", repeatCustomers),
+    sales: metricTool(orders, "sales", "Return sales after discounts in cents and distinct order count by order date. Refunds are a separate return metric.", sales),
+    bestSellers: metricTool(orders, "bestSellers", "Rank products by quantity sold by order date, using sales cents and product ID as tiebreakers.", bestSellers),
+    returns: metricTool(orders, "returns", "Count returned order lines and refund cents by return date. Does not report units returned.", returns),
+    repeatCustomers: metricTool(orders, "repeatCustomers", "Count distinct repeat and total customers by order date, and return their ratio when there are customers.", repeatCustomers),
   };
 
-  const result = await generateText({
+  return {
     model,
     system: instruction,
     prompt: question,
@@ -61,18 +65,92 @@ export async function answerMerchantQuestion(
     maxRetries: 0,
     maxOutputTokens: 600,
     abortSignal,
-  });
+  };
+}
 
+export async function answerMerchantQuestion(
+  question: string,
+  orders: readonly OrderLine[],
+  model: LanguageModel,
+  abortSignal?: AbortSignal,
+) {
+  const result = await generateText(merchantParameters(question, orders, model, abortSignal));
   const metrics = result.steps.flatMap((step) =>
-    step.staticToolResults.map(({ toolName, output }) => ({ metric: toolName, ...output })),
+    step.staticToolResults.map(({ output }) => output),
   );
 
   if (metrics.length === 0) {
-    return {
-      answer: "Ask about sales, best-selling products, returned order lines, or repeat customers. You can specify a date range or an exact product or category.",
-      metrics,
-    };
+    return { answer: fallback, metrics };
   }
 
   return { answer: result.text || "Here are the results from the order history.", metrics };
+}
+
+type MetricResult = Awaited<ReturnType<typeof answerMerchantQuestion>>["metrics"][number];
+
+function chartFor(orders: readonly OrderLine[], result: MetricResult): MetricChart {
+  const filters = result.filters;
+  switch (result.metric) {
+    case "sales":
+      return {
+        title: "Sales by order date",
+        measure: "Amount after discounts",
+        filters,
+        points: salesByDay(orders, filters).map(([label, cents]) => ({ label, value: cents / 100 })),
+      };
+    case "bestSellers":
+      return {
+        title: "Best-selling products",
+        measure: "Units sold",
+        filters,
+        horizontal: true,
+        points: result.value.map(({ name, units, productId }) => ({ label: name, id: productId, value: units })),
+      };
+    case "returns":
+      return {
+        title: "Returned lines by return date",
+        measure: "Returned lines",
+        filters,
+        points: returnedLinesByDay(orders, filters).map(([label, value]) => ({ label, value })),
+      };
+    case "repeatCustomers": {
+      const { repeatCustomers: repeat, totalCustomers } = result.value;
+      return {
+        title: "Repeat customers",
+        measure: "Customers",
+        filters,
+        points: totalCustomers ? [
+          { label: "Repeat", value: repeat },
+          { label: "Other", value: totalCustomers - repeat },
+        ] : [],
+      };
+    }
+  }
+}
+
+export async function* streamMerchantQuestion(
+  question: string,
+  orders: readonly OrderLine[],
+  model: LanguageModel,
+  abortSignal?: AbortSignal,
+): AsyncGenerator<MerchantStreamEvent, void> {
+  const { fullStream } = streamText(merchantParameters(question, orders, model, abortSignal));
+  let hasMetric = false;
+  let hasAnswer = false;
+  for await (const part of fullStream) {
+    if (part.type === "tool-result" && !part.dynamic) {
+      hasMetric = true;
+      yield { type: "chart", id: part.toolCallId, chart: chartFor(orders, part.output) };
+    } else if (part.type === "text-delta" && hasMetric) {
+      hasAnswer ||= Boolean(part.text.trim());
+      yield { type: "text", text: part.text };
+    } else if (part.type === "error" || part.type === "abort") {
+      yield { type: "error", message: "The response was interrupted. Try asking again." };
+      return;
+    }
+  }
+  if (!hasAnswer) {
+    yield { type: "text", text: hasMetric ? "Here are the results from the order history." : fallback };
+  }
+  yield { type: "done" };
 }

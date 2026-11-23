@@ -32,6 +32,14 @@ export function sales(orders: readonly OrderLine[], input: MetricInput) {
   };
 }
 
+export function salesByDay(orders: readonly OrderLine[], input: MetricInput) {
+  const totals = new Map<string, number>();
+  for (const row of eligibleOrders(orders, input, "order_date")) {
+    totals.set(row.order_date, (totals.get(row.order_date) ?? 0) + row.line_total);
+  }
+  return [...totals].sort(([a], [b]) => a.localeCompare(b));
+}
+
 export function bestSellers(orders: readonly OrderLine[], input: MetricInput) {
   const products = new Map<string, ProductRanking>();
   for (const line of eligibleOrders(orders, input, "order_date")) {
@@ -57,6 +65,14 @@ export function returns(orders: readonly OrderLine[], input: MetricInput) {
     returnedLines: returnedLines.length,
     refundCents: returnedLines.reduce((sum, line) => sum + line.refund_amount, 0),
   };
+}
+
+export function returnedLinesByDay(orders: readonly OrderLine[], input: MetricInput) {
+  const totals = new Map<string, number>();
+  for (const row of eligibleOrders(orders, input, "return_date")) {
+    totals.set(row.return_date, (totals.get(row.return_date) ?? 0) + 1);
+  }
+  return [...totals].sort(([a], [b]) => a.localeCompare(b));
 }
 
 export function repeatCustomers(orders: readonly OrderLine[], input: MetricInput) {

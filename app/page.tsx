@@ -1,6 +1,7 @@
 import { metricInputSchema, resolveDateRange } from "../lib/dates";
 import { bestSellers, repeatCustomers, returns, sales } from "../lib/metrics";
 import { loadStoreOrders } from "../lib/orders";
+import { MerchantQuestion } from "./merchant-question";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function Page({
   return (
     <main>
       <h1>Merchant metrics</h1>
+      <MerchantQuestion />
       <form>
         <label>Start date <input type="date" name="startDate" defaultValue={params.startDate ?? defaults.startDate} required /></label>
         <label>End date <input type="date" name="endDate" defaultValue={params.endDate ?? defaults.endDate} required /></label>

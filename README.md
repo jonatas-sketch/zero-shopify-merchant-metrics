@@ -88,3 +88,11 @@ curl -fsS http://localhost:3000/api/merchant \
 The response contains an answer alongside structured tool results. Each tool result includes its exact date range, optional filters and computed metric. The API sends the merchant question and aggregate tool results to OpenRouter. The order history is read locally.
 
 The OpenRouter test supplies recorded-shaped chat completions through the SDK's test transport. It exercises the full tool call and follow-up message without contacting OpenRouter. The route checks and production build run locally. A live model run and submission in Zero are still pending.
+
+## Streaming charts
+
+The dashboard accepts a merchant's question and sends it to `POST /api/merchant/stream` as JSON. The response delivers newline-delimited chart, answer, error and completion events. Charts use the result of the selected metric function and appear as soon as its data arrives. The answer can continue streaming after the chart is shown.
+
+Sales are grouped by order date, returned lines by return date, best sellers by product and repeat customers by customer cohort. Each chart displays its exact period and filters and provides a table of the numeric values. The original non-streaming API remains available.
+
+The local browser check used the course CSV and a simulated OpenRouter tool call for outerwear returns on October 20–26. The chart appeared before the simulated answer and showed one returned line each on October 21, 23, 24 and 26. Live OpenRouter verification is pending.

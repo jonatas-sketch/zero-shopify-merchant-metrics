@@ -11,3 +11,17 @@ dl div { background: white; border: 1px solid #d5ddd5; border-radius: .6rem; pad
 dd { margin: 0; font-size: 1.55rem; font-weight: 650; }
 table { border-collapse: collapse; width: 100%; }
 th, td { padding: .55rem .35rem; border-bottom: 1px solid #c9d4cb; text-align: start; }
+.merchant-questions { padding: 1.25rem; background: white; border: 1px solid #d5ddd5; border-radius: .75rem; margin-block-end: 2rem; }
+.merchant-questions h2 { margin-block-start: 0; }
+.merchant-question { flex: 1 1 16rem; }
+.merchant-question input { min-width: 0; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.secondary { background: white; color: #1f5136; }
+.merchant-examples { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+.merchant-examples button { font-size: .875rem; text-align: start; }
+.merchant-status:empty { display: none; }
+.merchant-chart { margin: 1rem 0; border-top: 1px solid #d5ddd5; padding-block-start: .85rem; }
+.merchant-chart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem 1rem; margin: 0 0 .5rem; }
+.merchant-chart figcaption span { font-size: .875rem; }
+.merchant-chart table { margin-block-start: .45rem; }
+.merchant-answer { white-space: pre-wrap; }
