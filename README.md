@@ -74,3 +74,17 @@ The terminal run against the 28 course order lines resolved the period to Octobe
 | Repeat customers | 4 of 12 distinct customers |
 
 Four automated tests cover the calendar resolver, date and filter boundaries, grouping, validated CSV records and empty periods. The Next.js production build and a local HTTP smoke test also passed.
+
+## OpenRouter integration
+
+This branch adds a server-side API for merchant questions. Set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` for a model with tool calling in the server environment. Configure the course CSV as above before starting Next.js.
+
+```sh
+curl -fsS http://localhost:3000/api/merchant \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What were last week’s outerwear returns?"}'
+```
+
+The response contains an answer alongside structured tool results. Each tool result includes its exact date range, optional filters and computed metric. The API sends the merchant question and aggregate tool results to OpenRouter. The order history is read locally.
+
+The OpenRouter test supplies recorded-shaped chat completions through the SDK's test transport. It exercises the full tool call and follow-up message without contacting OpenRouter. The route checks and production build run locally. A live model run and submission in Zero are still pending.
