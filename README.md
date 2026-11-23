@@ -136,4 +136,4 @@ The command accepts the public URL when it is available. It checks the winter ja
 
 ### Local acceptance results
 
-The full localhost run with the original CSV selected the expected report or no-data outcome on 19 of the 20 workbook cases. AQ-04 returned no chart on either attempt. AQ-14 and AQ-17 produced correct results in 5.61 and 12.11 seconds on the full run and in 2.41 and 1.77 seconds on retry. The separate winter-jacket report showed four returns and appeared in 2.45 seconds. The browser also rendered both sales channels and the no-records state for boots. Public deployment and public timings are pending.
+The latest localhost run with the original CSV produced the expected report or no-data outcome for all 20 workbook cases. Three charts arrived above the five-second target. AQ-01 took 6.54 seconds, AQ-03 took 8.27 seconds, and AQ-06 took 37.00 seconds. The separate winter-jacket report showed four returns and appeared in 1.46 seconds. The browser also rendered both sales channels and the no-records state for boots. The release built from a clean archive without the CSV or the OpenRouter key. Public deployment and public timings are pending.

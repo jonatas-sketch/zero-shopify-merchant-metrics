@@ -15,6 +15,10 @@ const salesChannels = [
   ["Instagram", /\binstagram\b/i],
 ] as const;
 
+function hasExplicitPeriod(question: string) {
+  return relativePeriod.test(question) || namedDate.test(question);
+}
+
 function metricTool<Name extends string, T>(
   question: string,
   orders: readonly OrderLine[],
@@ -28,7 +32,7 @@ function metricTool<Name extends string, T>(
     inputSchema: metricInputSchema,
     execute: async (input) => {
       const filters = metricInputSchema.parse(input);
-      if (!relativePeriod.test(question) && !namedDate.test(question)) {
+      if (!hasExplicitPeriod(question)) {
         Object.assign(filters, resolveDateRange());
       }
       if (filters.limit && !rankingCount.test(question)) delete filters.limit;
@@ -74,6 +78,19 @@ function explicitMetric(question: string) {
     .map(([toolName, pattern]) => ({ toolName, index: question.search(pattern) }))
     .filter(({ index }) => index >= 0)
     .sort((a, b) => a.index - b.index)[0]?.toolName;
+}
+
+function metricPrompt(question: string, firstTool: ReturnType<typeof explicitMetric>) {
+  const original = " Original merchant question: " + question;
+  if (firstTool === "repeatCustomers" && !hasExplicitPeriod(question) &&
+    /\b(?:grow(?:ing|th)?|trend|increas(?:e|ing)|declin(?:e|ing))\b/i.test(question)) {
+    return "Show repeat customer share for the default period. Explain that one period cannot establish growth." + original;
+  }
+  if ((firstTool === "sales" || firstTool === "returns") &&
+    /\b(?:(?:sales|revenue)\s*(?:and|&|plus)\s*(?:returns|refunds)|(?:returns|refunds)\s*(?:and|&|plus)\s*(?:sales|revenue))\b/i.test(question)) {
+    return `Show the ${firstTool} report using the merchant's period and filters. Explain that the dashboard displays one report at a time.` + original;
+  }
+  return question;
 }
 
 const presets = {
@@ -156,7 +173,7 @@ function merchantParameters(
   return {
     model,
     system: instruction,
-    prompt: question,
+    prompt: metricPrompt(question, firstTool),
     tools,
     stopWhen: stepCountIs(2),
     prepareStep: ({ stepNumber }: { stepNumber: number }) => {

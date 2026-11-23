@@ -101,6 +101,74 @@ test("an unsupported question cannot render an ungrounded model total", async ()
   assert.doesNotMatch(result.answer, /999/);
 });
 
+test("a vague repeat-customer trend requests a snapshot with an explicit limitation", async () => {
+  let requests = 0;
+  const model = createOpenRouter({
+    apiKey: "fixture-key",
+    fetch: async (_url, options) => {
+      if (++requests === 1) {
+        assert.match(String(options?.body), /Show repeat customer share for the default period/);
+        assert.match(String(options?.body), /one period cannot establish growth/);
+        return reply({
+          content: null,
+          tool_calls: [{
+            id: "repeat-fixture",
+            type: "function",
+            function: {
+              name: "repeatCustomers",
+              arguments: JSON.stringify({ startDate: "2025-09-01", endDate: "2025-10-27" }),
+            },
+          }],
+        }, "tool_calls");
+      }
+      return reply({ content: "One repeat customer. One period cannot establish growth." }, "stop");
+    },
+  }).chat("mock/merchant-model");
+
+  const result = await answerMerchantQuestion("Are repeat buyers increasing lately?", orders, model);
+  assert.deepEqual(result.metrics, [{
+    metric: "repeatCustomers",
+    filters: { startDate: "2025-09-28", endDate: "2025-10-27" },
+    value: { repeatCustomers: 1, totalCustomers: 1, repeatRate: 1 },
+  }]);
+  assert.match(result.answer, /cannot establish growth/);
+});
+
+test("a paired sales and returns question asks for the first metric using the merchant's filters", async () => {
+  let requests = 0;
+  const model = createOpenRouter({
+    apiKey: "fixture-key",
+    fetch: async (_url, options) => {
+      if (++requests === 1) {
+        const body = String(options?.body);
+        assert.match(body, /Show the sales report using the merchant's period and filters/);
+        assert.match(body, /sales and returns for accessories last week/);
+        return reply({
+          content: null,
+          tool_calls: [{
+            id: "sales-fixture",
+            type: "function",
+            function: {
+              name: "sales",
+              arguments: JSON.stringify({
+                startDate: "2025-10-20", endDate: "2025-10-26", category: "Accessories",
+              }),
+            },
+          }],
+        }, "tool_calls");
+      }
+      return reply({ content: "The sales report shows one order for the requested range." }, "stop");
+    },
+  }).chat("mock/merchant-model");
+
+  const result = await answerMerchantQuestion("Show sales and returns for accessories last week", orders, model);
+  assert.deepEqual(result.metrics, [{
+    metric: "sales",
+    filters: { startDate: "2025-10-20", endDate: "2025-10-26", category: "Accessories" },
+    value: { salesCents: 1000, orders: 1 },
+  }]);
+});
+
 test("the HTTP route rejects empty or malformed questions before model access", async () => {
   for (const body of ["not-json", JSON.stringify({ question: "  " }), JSON.stringify({ question: 42 })]) {
     const response = await POST(new Request("http://localhost/api/merchant", { method: "POST", body }));
