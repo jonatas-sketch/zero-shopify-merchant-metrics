@@ -1,9 +1,10 @@
-import { resolveDateRange } from "../lib/dates";
+import { datePresetSchema, resolveDateRange } from "../lib/dates";
 import { bestSellers, repeatCustomers, returns, sales } from "../lib/metrics";
 import { loadStoreOrders } from "../lib/orders";
 
+const preset = datePresetSchema.parse(process.argv[2] ?? "this-month");
+const period = resolveDateRange(preset);
 const orders = await loadStoreOrders();
-const period = resolveDateRange("this-month");
 console.log(JSON.stringify({
   period,
   sales: sales(orders, period),

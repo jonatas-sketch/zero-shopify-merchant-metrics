@@ -9,7 +9,7 @@ Copy the CSV from the Zero brief to `data/store-orders.csv` or point `SHOPIFY_OR
 ```sh
 npm ci
 npm test
-npm run metrics
+npm run --silent metrics -- last-week
 npm run dev
 ```
 
@@ -24,9 +24,43 @@ npm run dev
 
 All metric inputs use inclusive ISO dates and accept optional exact product ID or title and category filters. Sales and refunds are tracked separately because their reporting dates differ.
 
-The exercise anchor is 2025-10-31. “Last week” resolves to October 20–26, “this month” is October 1–31 and a missing date uses October 2–31. The week begins on Monday. The resolver uses calendar dates in UTC.
+The exercise anchor is 2025-10-31. The resolver uses calendar dates in UTC and weeks begin on Monday.
 
-`npm run metrics` prints the four October outputs from the supplied local fixture. This stage prepares the tool inputs and outputs for the model and streaming charts in later stages.
+| Question uses | Inclusive range at this anchor |
+| --- | --- |
+| Last week | October 20–26 |
+| This week | October 27–31 |
+| This month | October 1–31 |
+| Last month | September 1–30 |
+| No date | October 2–31 |
+
+This stage prepares the tool inputs and outputs for the model and streaming charts in later stages.
+
+## Prompt and review
+
+The instruction proposed to Erik was to create a Next.js App Router project in TypeScript, validate the CSV server-side and write one pure function per metric with inclusive dates and optional product filters. The instruction also specified integer cents, a separate date resolver and tests for boundary dates and empty ranges.
+
+During implementation, the returns function was verified against the date of the return and reports returned lines because the CSV does not state returned quantities. Repeat customers are deduplicated by customer ID to avoid counting an order with multiple items more than once.
+
+## Verified last-week run
+
+`npm run --silent metrics -- last-week` produced the following output for October 20–26. The results below preserve the four calculations and exclude order-level and customer-level rows.
+
+```json
+{
+  "period": { "startDate": "2025-10-20", "endDate": "2025-10-26" },
+  "sales": { "salesCents": 54350, "orders": 4 },
+  "bestSellers": [
+    { "productId": "P-1010", "name": "Wool Beanie", "units": 3, "salesCents": 7200 },
+    { "productId": "P-1001", "name": "Alpine Down Parka", "units": 1, "salesCents": 19710 },
+    { "productId": "P-1002", "name": "Northridge Insulated Jacket", "units": 1, "salesCents": 15900 },
+    { "productId": "P-1009", "name": "Utility Chino", "units": 1, "salesCents": 7400 },
+    { "productId": "P-1011", "name": "Leather Gloves", "units": 1, "salesCents": 4140 }
+  ],
+  "returns": { "returnedLines": 4, "refundCents": 79215 },
+  "repeatCustomers": { "repeatCustomers": 2, "totalCustomers": 4, "repeatRate": 0.5 }
+}
+```
 
 ## Verified October run
 
